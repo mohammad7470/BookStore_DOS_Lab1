@@ -86,13 +86,20 @@ The Catalog Service manages inventory data, while the Order Service maintains pu
 
 Each service will run in its own Docker container. Docker Compose will simplify deployment and networking between the three services.
 
-## 5. Planned API Operations
+## 5. REST API Operations
 
-| Service  | Operation                             |
-| -------- | ------------------------------------- |
-| Frontend | search, info, purchase                |
-| Catalog  | query by topic, query by item, update |
-| Order    | purchase                              |
+The Catalog Service currently provides the following REST endpoints:
+
+| Method | Endpoint                         | Description                 | Status      |
+| ------ | -------------------------------- | --------------------------- | ----------- |
+| GET    | `/info/:id`                      | Retrieve book details by ID | Implemented |
+| GET    | `/search/:topic`                 | Search for books by topic   | Implemented |
+| PUT    | `/update/price/:id?price=value`  | Update a book's price       | Implemented |
+| PUT    | `/update/stock/:id?change=value` | Increase or decrease stock  | Implemented |
+
+The Frontend and Order Service APIs will be implemented in the next development stages.
+
+All Catalog endpoints currently run on port `8081`.
 
 ## 6. Repository Structure
 
@@ -111,27 +118,136 @@ BookStore_DOS_Lab1/
 │   └── design.md
 ├── .gitignore
 └── README.md
+├── data/
+│   └── catalog/
+│       └── catalog.db   (ignored by Git)
 ```
 
 Dockerfiles and the Docker Compose configuration will be added during the deployment phase.
 
 ## 7. Development Roadmap
 
+### Project Setup
+
 - [x] Initialize GitHub repository
-- [x] Configure Java and Maven development environment
-- [x] Test an initial Spark Java HTTP endpoint
-- [ ] Complete three-service project scaffolding
-- [ ] Implement Catalog Service
+- [x] Configure Java 21 and Apache Maven
+- [x] Set up the three Maven service projects
+- [x] Select the system architecture and technologies
+
+### Catalog Service
+
+- [x] Create Book model
+- [x] Configure SQLite database connection
+- [x] Create books table
+- [x] Implement initial book seeding
+- [x] Implement database queries
+- [x] Implement price and stock updates
+- [x] Implement REST endpoints using Spark Java
+- [x] Add atomic conditional stock updates
+- [x] Perform manual API testing
+
+### Remaining Work
+
 - [ ] Implement Order Service
+- [ ] Implement persistent order logging
 - [ ] Implement Frontend Service
-- [ ] Add persistent storage
-- [ ] Implement concurrency-safe inventory updates
-- [ ] Configure Docker deployment
-- [ ] Perform integration and concurrent-request testing
-- [ ] Complete design documentation and execution logs
+- [ ] Establish inter-service HTTP communication
+- [ ] Deploy services using Docker
+- [ ] Perform integration and concurrency testing
+- [ ] Complete final documentation and execution logs
 
 ## 8. Current Status
 
-**Initial setup and architecture planning.**
+**Current Phase: Catalog Service Completed — Order Service Next**
 
-The repository is in its early development stage. The architecture and technology choices are documented, but the complete bookstore functionality has not yet been implemented.
+The core functionality of the Catalog Service has been implemented and manually tested.
+
+The service uses Java 21, Spark Java, SQLite, and JDBC to manage book information and inventory.
+
+The following operations are working:
+
+- Retrieving book information by ID.
+- Searching books by topic.
+- Updating book prices.
+- Increasing and decreasing stock quantities.
+- Preventing negative inventory quantities.
+- Persisting book information across application restarts.
+
+The Catalog Service runs independently as an HTTP server on port 8081.
+
+The next development phase is implementing the Order Service and establishing HTTP communication between Order and Catalog.
+
+The Frontend Service, Docker deployment, and complete distributed integration testing are still pending.
+
+## 9. Running and Testing the Catalog Service
+
+### Requirements
+
+- Java 21
+- Apache Maven
+
+### Running the Service
+
+Open PowerShell in the repository root, then navigate to the Catalog directory:
+
+`cd catalog`
+
+Create the SQLite database directory if it does not exist:
+
+`New-Item -ItemType Directory -Force ..\data\catalog`
+
+Start the service:
+
+`mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
+
+The application initializes the database, creates the books table if necessary, inserts missing initial books, and starts the HTTP server on port 8081.
+
+Keep the terminal running while sending requests.
+
+### Testing GET Requests
+
+Open the following URLs in a browser:
+
+**Retrieve book information:**
+
+`http://localhost:8081/info/2`
+
+**Search by topic:**
+
+`http://localhost:8081/search/distributed%20systems`
+
+**Test a nonexistent book:**
+
+`http://localhost:8081/info/99`
+
+### Testing PUT Requests
+
+Open a second PowerShell terminal while the Catalog Service is running.
+
+**Update a book's price:**
+
+`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/price/2?price=80"`
+
+**Decrease stock by one:**
+
+`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1"`
+
+**Increase stock by five:**
+
+`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=5"`
+
+**Test insufficient stock:**
+
+`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1000"`
+
+The final request should be rejected because stock quantities cannot become negative.
+
+### Testing Results
+
+The implemented Catalog endpoints were tested manually using a web browser, PowerShell, and SQLite Viewer.
+
+Tests confirmed successful retrieval, searching, inventory modification, validation of unavailable books, and persistent database updates.
+
+Automated and concurrent-load testing remain pending.
+
+**Note:** Successful PUT requests modify persistent database values. Repeating a stock update will apply the change again.
