@@ -4,250 +4,252 @@
 
 ## 1. Project Overview
 
-Bazar.com is a small distributed online bookstore developed as part of the Distributed and Operating Systems laboratory.
+Bazar.com is a distributed online bookstore developed as part of the Distributed and Operating Systems laboratory.
 
-The system manages a catalog of four books and provides three main operations:
+The system manages four books and provides three main client operations:
 
 - **Search:** Find books by topic.
 - **Info:** Retrieve details about a specific book.
 - **Purchase:** Buy a book and update its available stock.
 
-The main objective is to understand distributed systems, microservices, HTTP communication, concurrency, data persistence, and containerized deployment.
+The main objective is to explore microservices, HTTP communication, concurrency, persistent storage, and containerized deployment.
 
 ## 2. System Architecture
 
 The application follows a two-tier architecture consisting of three independent microservices.
 
-```text
-                   Client
-                     |
-                     v
-              Frontend Service
-                     |
-              +------+------+
-              |             |
-              v             v
-        Catalog Service  Order Service
-              ^             |
-              +-------------+
-```
+**Client → Frontend → Catalog / Order**
+
+The Order Service also communicates directly with the Catalog Service when processing purchases.
 
 ### Frontend Service
 
 - Acts as the entry point for client requests.
-- Routes search and information requests to the Catalog Service.
-- Forwards purchase requests to the Order Service.
+- Routes search and information requests to Catalog.
+- Forwards purchase requests to Order.
+- **Status:** Not yet implemented.
 
 ### Catalog Service
 
 - Maintains book information, prices, topics, and stock quantities.
 - Supports querying and updating catalog entries.
-- Stores catalog data persistently.
+- Stores data persistently using SQLite.
+- **Status:** Core functionality implemented and manually tested.
 
 ### Order Service
 
 - Processes book purchase requests.
-- Communicates with the Catalog Service to verify and update stock.
-- Maintains a persistent order log.
+- Communicates with Catalog through HTTP.
+- Checks book availability and requests stock reduction.
+- Saves successful purchases to its own SQLite database.
+- **Status:** Core functionality implemented and manually tested.
 
 ## 3. Technology Stack
 
-| Technology     | Purpose                                   |
-| -------------- | ----------------------------------------- |
-| Java 21        | Main implementation language              |
-| Spark Java     | Lightweight HTTP web framework            |
-| Apache Maven   | Dependency management and project builds  |
-| REST API       | Communication between services            |
-| JSON           | Data exchange format                      |
-| SQLite         | Lightweight persistent data storage       |
-| Docker         | Isolated deployment of microservices      |
-| Docker Compose | Multi-container orchestration             |
-| Git & GitHub   | Version control and project collaboration |
+| Technology      | Purpose                               |
+| --------------- | ------------------------------------- |
+| Java 21         | Main implementation language          |
+| Spark Java      | Lightweight HTTP framework            |
+| Apache Maven    | Dependency management and builds      |
+| Java HttpClient | Communication between services        |
+| REST API        | Service interfaces                    |
+| Gson / JSON     | JSON processing and data exchange     |
+| SQLite / JDBC   | Persistent database storage           |
+| Docker          | Planned container deployment          |
+| Docker Compose  | Planned multi-container orchestration |
+| Git & GitHub    | Version control and collaboration     |
 
 ## 4. Design Decisions
 
 **Independent Maven Projects**
 
-Each microservice has its own source code, dependencies, and build configuration. This provides separation of concerns and allows services to be built and deployed independently.
+Each microservice has its own source code, dependencies, and build configuration. This allows services to be developed and deployed independently.
 
 **Lightweight Web Framework**
 
-Spark Java was selected because the application requires simple REST endpoints rather than a full-featured web application framework.
+Spark Java was selected to implement simple REST endpoints without the overhead of a full-featured web framework.
 
 **REST Communication**
 
-Services communicate through HTTP requests and JSON responses, allowing them to operate as separate processes across different machines.
+Services communicate using HTTP and JSON instead of directly accessing each other's classes or databases.
 
 **Service-Owned Data**
 
-The Catalog Service manages inventory data, while the Order Service maintains purchase records. Other services access catalog information through its API.
+Catalog owns inventory data, while Order owns purchase records. The two databases are stored separately.
+
+**Layered Code Organization**
+
+HTTP routing, business logic, database operations, and inter-service communication are separated into dedicated Java classes.
 
 **Containerized Deployment**
 
-Each service will run in its own Docker container. Docker Compose will simplify deployment and networking between the three services.
+Each service is planned to run inside its own Docker container. Docker Compose will be used for networking and orchestration.
 
 ## 5. REST API Operations
 
-The Catalog Service currently provides the following REST endpoints:
+### Catalog Service — Port 8081
 
-| Method | Endpoint                         | Description                 | Status      |
-| ------ | -------------------------------- | --------------------------- | ----------- |
-| GET    | `/info/:id`                      | Retrieve book details by ID | Implemented |
-| GET    | `/search/:topic`                 | Search for books by topic   | Implemented |
-| PUT    | `/update/price/:id?price=value`  | Update a book's price       | Implemented |
-| PUT    | `/update/stock/:id?change=value` | Increase or decrease stock  | Implemented |
+| Method | Endpoint                         | Description           |
+| ------ | -------------------------------- | --------------------- |
+| GET    | `/info/:id`                      | Retrieve book details |
+| GET    | `/search/:topic`                 | Search by topic       |
+| PUT    | `/update/price/:id?price=value`  | Update book price     |
+| PUT    | `/update/stock/:id?change=value` | Modify stock quantity |
 
-The Frontend and Order Service APIs will be implemented in the next development stages.
+### Order Service — Port 8082
 
-All Catalog endpoints currently run on port `8081`.
+| Method | Endpoint        | Description             |
+| ------ | --------------- | ----------------------- |
+| POST   | `/purchase/:id` | Process a book purchase |
+
+The purchase operation requests book information from Catalog, verifies availability, decreases the stock, and records the order.
+
+### Frontend Service — Planned Port 8080
+
+The Frontend Service will provide the client-facing search, information, and purchase APIs.
 
 ## 6. Repository Structure
 
-```text
-BookStore_DOS_Lab1/
-├── catalog/
-│   ├── pom.xml
-│   └── src/
-├── order/
-│   ├── pom.xml
-│   └── src/
-├── frontend/
-│   ├── pom.xml
-│   └── src/
-├── docs/
-│   └── design.md
-├── .gitignore
-└── README.md
-├── data/
-│   └── catalog/
-│       └── catalog.db   (ignored by Git)
-```
+- `catalog/` — Catalog microservice.
+- `order/` — Order microservice.
+- `frontend/` — Frontend microservice, pending implementation.
+- `data/catalog/` — Local Catalog SQLite database.
+- `data/order/` — Local Order SQLite database.
+- `docs/design.md` — System design documentation.
+- `.gitignore` — Excluded build files and local databases.
 
-Dockerfiles and the Docker Compose configuration will be added during the deployment phase.
+Database files and build outputs are excluded from Git.
 
 ## 7. Development Roadmap
 
 ### Project Setup
 
-- [x] Initialize GitHub repository
-- [x] Configure Java 21 and Apache Maven
-- [x] Set up the three Maven service projects
-- [x] Select the system architecture and technologies
+- [x] Initialize GitHub repository.
+- [x] Configure Java 21 and Maven.
+- [x] Create three independent Maven projects.
+- [x] Select the system architecture and technologies.
 
 ### Catalog Service
 
-- [x] Create Book model
-- [x] Configure SQLite database connection
-- [x] Create books table
-- [x] Implement initial book seeding
-- [x] Implement database queries
-- [x] Implement price and stock updates
-- [x] Implement REST endpoints using Spark Java
-- [x] Add atomic conditional stock updates
-- [x] Perform manual API testing
+- [x] Implement Book model.
+- [x] Configure SQLite and create the books table.
+- [x] Seed the initial four books.
+- [x] Implement database queries and updates.
+- [x] Implement REST endpoints using Spark Java.
+- [x] Implement conditional stock updates.
+- [x] Perform manual API testing.
+
+### Order Service
+
+- [x] Establish HTTP communication with Catalog.
+- [x] Parse JSON responses.
+- [x] Implement book availability checks.
+- [x] Implement stock reduction requests.
+- [x] Create a separate Order SQLite database.
+- [x] Implement persistent order logging.
+- [x] Implement the purchase REST endpoint.
+- [x] Perform basic manual purchase testing.
 
 ### Remaining Work
 
-- [ ] Implement Order Service
-- [ ] Implement persistent order logging
-- [ ] Implement Frontend Service
-- [ ] Establish inter-service HTTP communication
-- [ ] Deploy services using Docker
-- [ ] Perform integration and concurrency testing
-- [ ] Complete final documentation and execution logs
+- [ ] Implement Frontend Service.
+- [ ] Complete end-to-end integration testing.
+- [ ] Improve failure handling and purchase consistency.
+- [ ] Test concurrent purchase requests.
+- [ ] Deploy all three services using Docker.
+- [ ] Complete final documentation and execution logs.
 
 ## 8. Current Status
 
-**Current Phase: Catalog Service Completed — Order Service Next**
+**Current Phase: Catalog and Order Core Functionality Implemented — Frontend Next**
 
-The core functionality of the Catalog Service has been implemented and manually tested.
+The Catalog Service supports book queries, searching, price updates, and inventory management.
 
-The service uses Java 21, Spark Java, SQLite, and JDBC to manage book information and inventory.
+The Order Service communicates with Catalog using HTTP requests, checks book availability, reduces stock, and stores successful purchases in a separate SQLite database.
 
-The following operations are working:
+Both services have been tested locally.
 
-- Retrieving book information by ID.
-- Searching books by topic.
-- Updating book prices.
-- Increasing and decreasing stock quantities.
-- Preventing negative inventory quantities.
-- Persisting book information across application restarts.
+The full distributed application is not yet complete. Frontend integration, Docker deployment, concurrency testing, and stronger recovery from partial purchase failures remain pending.
 
-The Catalog Service runs independently as an HTTP server on port 8081.
-
-The next development phase is implementing the Order Service and establishing HTTP communication between Order and Catalog.
-
-The Frontend Service, Docker deployment, and complete distributed integration testing are still pending.
-
-## 9. Running and Testing the Catalog Service
+## 9. Running and Testing
 
 ### Requirements
 
 - Java 21
 - Apache Maven
+- Windows PowerShell or another HTTP client
 
-### Running the Service
+### Step 1 — Prepare Database Directories
 
-Open PowerShell in the repository root, then navigate to the Catalog directory:
+From the project root, create the directories if they do not exist:
 
-`cd catalog`
+`New-Item -ItemType Directory -Force data\catalog`
 
-Create the SQLite database directory if it does not exist:
+`New-Item -ItemType Directory -Force data\order`
 
-`New-Item -ItemType Directory -Force ..\data\catalog`
+### Step 2 — Start Catalog
 
-Start the service:
+Open a terminal in the `catalog` directory:
 
 `mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
 
-The application initializes the database, creates the books table if necessary, inserts missing initial books, and starts the HTTP server on port 8081.
+Catalog runs on port `8081`.
 
-Keep the terminal running while sending requests.
+### Step 3 — Start Order
 
-### Testing GET Requests
+Keep Catalog running. Open another terminal in the `order` directory:
 
-Open the following URLs in a browser:
+`mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
 
-**Retrieve book information:**
+Order runs on port `8082`.
+
+### Step 4 — Test Catalog
+
+Retrieve book information:
 
 `http://localhost:8081/info/2`
 
-**Search by topic:**
+Search by topic:
 
 `http://localhost:8081/search/distributed%20systems`
 
-**Test a nonexistent book:**
-
-`http://localhost:8081/info/99`
-
-### Testing PUT Requests
-
-Open a second PowerShell terminal while the Catalog Service is running.
-
-**Update a book's price:**
+Update a book's price using PowerShell:
 
 `Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/price/2?price=80"`
 
-**Decrease stock by one:**
+Decrease stock:
 
 `Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1"`
 
-**Increase stock by five:**
+### Step 5 — Test Order
 
-`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=5"`
+Open a third PowerShell terminal.
 
-**Test insufficient stock:**
+Purchase book 2:
 
-`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1000"`
+`Invoke-RestMethod -Method Post -Uri "http://localhost:8082/purchase/2"`
 
-The final request should be rejected because stock quantities cannot become negative.
+Check the book information again:
 
-### Testing Results
+`http://localhost:8081/info/2`
 
-The implemented Catalog endpoints were tested manually using a web browser, PowerShell, and SQLite Viewer.
+The stock should decrease by one after a successful purchase.
 
-Tests confirmed successful retrieval, searching, inventory modification, validation of unavailable books, and persistent database updates.
+Verify the order log by opening `data/order/orders.db` with SQLite Viewer and executing:
 
-Automated and concurrent-load testing remain pending.
+`SELECT * FROM orders;`
 
-**Note:** Successful PUT requests modify persistent database values. Repeating a stock update will apply the change again.
+### Testing Notes
+
+- Catalog search, information retrieval, and inventory updates were tested manually.
+- Order-to-Catalog HTTP communication was verified.
+- A purchase was tested by checking the stock change and persistent order record.
+- Requests for nonexistent books and insufficient stock should be rejected.
+- Each successful purchase changes persistent data.
+- Automated concurrency and failure-recovery tests are still pending.
+
+**Important:** The current purchase workflow can become inconsistent if stock reduction succeeds but saving the order fails. This limitation will be addressed or documented during final integration.
+
+## 10. Documentation
+
+See [System Design Document](docs/design.md) for architecture details, service responsibilities, design decisions, and limitations.

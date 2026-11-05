@@ -6,170 +6,204 @@
 
 ## 1. System Overview
 
-Bazar.com is a distributed bookstore system designed using a multi-tier, microservices-based architecture. The system manages four books and supports searching, retrieving book details, and purchasing available items.
+Bazar.com is a distributed bookstore implemented using a multi-tier microservices architecture.
 
-The main objective is to demonstrate communication between independent services using HTTP REST APIs, while maintaining persistent data and supporting concurrent requests.
+The application manages four books and provides search, information retrieval, and purchase operations.
 
-The project contains three services: Frontend, Catalog, and Order.
+Its main objective is to demonstrate communication between independently running services using HTTP REST APIs, persistent storage, and concurrent request processing.
+
+The system consists of three services: Frontend, Catalog, and Order.
 
 ## 2. Architecture
 
-The system follows a client-server architecture with three independent microservices.
+The architecture contains a client-facing Frontend Service and two backend services: Catalog and Order.
 
-The **Frontend Service** acts as the entry point for client requests. It forwards search and information requests to Catalog and purchase requests to Order.
+Clients communicate with Frontend, which forwards search and information requests to Catalog and purchase requests to Order.
 
-The **Catalog Service** stores book information and manages inventory.
+The Order Service communicates with Catalog to retrieve book information and update inventory.
 
-The **Order Service** is responsible for processing purchases and communicating with Catalog to check availability and decrease stock.
+Services run as separate Java processes and communicate through HTTP rather than shared memory.
 
-Each service is designed to run independently and communicate over HTTP rather than through shared application memory.
-
-The final deployment will use three separate Linux Docker containers.
+Currently, Catalog and Order have been implemented and tested locally. Frontend and Docker deployment are planned for the next stages.
 
 ## 3. Service Responsibilities
 
 ### Catalog Service
 
-The Catalog Service is currently implemented using Java 21, Spark Java, JDBC, and SQLite.
+The Catalog Service manages all book and inventory information.
 
-It provides operations for:
+Its implementation is organized into the following classes:
 
-- Retrieving book information by ID.
-- Searching books by topic.
-- Updating book prices.
-- Increasing or decreasing stock quantities.
+- **Book:** Represents a book and its properties.
+- **Database:** Opens SQLite connections and initializes the books table.
+- **CatalogRepository:** Performs database queries, insertions, and updates.
+- **App:** Registers HTTP endpoints using Spark Java.
 
-The Catalog code is divided into four classes:
-
-- **Book:** Represents a book object.
-- **Database:** Manages database connections and schema initialization.
-- **CatalogRepository:** Handles SQL operations and data access.
-- **App:** Initializes the service and registers HTTP routes.
+The service supports searching by topic, querying by book ID, updating prices, and adjusting stock quantities.
 
 ### Order Service
 
-The Order Service will handle purchase requests.
+The Order Service processes purchase requests and keeps a persistent record of successful purchases.
 
-A purchase will require checking whether the requested book exists and has available stock, reducing the quantity through Catalog, and recording successful orders persistently.
+Its implementation includes:
+
+- **CatalogClient:** Sends HTTP requests to the Catalog Service using Java HttpClient.
+- **OrderService:** Coordinates the purchase workflow.
+- **OrderRepository:** Inserts successful purchase records into SQLite.
+- **Database:** Manages Order database connections and table initialization.
+- **App:** Starts the HTTP server and exposes the purchase endpoint.
+
+The purchase workflow consists of the following steps:
+
+1. Receive the requested book ID.
+2. Retrieve book information from Catalog.
+3. Check whether the book exists and is available.
+4. Request an inventory reduction from Catalog.
+5. Verify that the stock update succeeded.
+6. Save the purchase record to the Order database.
+7. Return the purchase result.
 
 ### Frontend Service
 
-The Frontend Service will provide client-facing search, information, and purchase operations.
+The Frontend Service will accept client requests and communicate with the appropriate backend service.
 
-It will forward requests to the appropriate backend service and return the results to the client.
+It has not yet been implemented.
 
 ## 4. REST API Design
 
-The services communicate using HTTP requests and JSON responses.
+HTTP REST APIs provide communication between the independent services.
 
-The currently implemented Catalog endpoints are:
+### Catalog APIs
 
-| Method | Endpoint            | Purpose                |
-| ------ | ------------------- | ---------------------- |
-| GET    | `/info/:id`         | Retrieve book details  |
-| GET    | `/search/:topic`    | Search by topic        |
-| PUT    | `/update/price/:id` | Update book price      |
-| PUT    | `/update/stock/:id` | Modify available stock |
+| Method | Endpoint            | Purpose               |
+| ------ | ------------------- | --------------------- |
+| GET    | `/info/:id`         | Retrieve book details |
+| GET    | `/search/:topic`    | Search for books      |
+| PUT    | `/update/price/:id` | Modify book price     |
+| PUT    | `/update/stock/:id` | Modify inventory      |
 
-The update endpoints use query parameters to provide the new price or the amount of stock change.
+Catalog currently runs on port `8081`.
 
-For example:
+### Order API
 
-`GET /info/2`
+| Method | Endpoint        | Purpose            |
+| ------ | --------------- | ------------------ |
+| POST   | `/purchase/:id` | Process a purchase |
 
-retrieves information about the second book.
+Order currently runs on port `8082`.
 
-`PUT /update/stock/2?change=-1`
+During a purchase, Order uses the Catalog information endpoint and the stock update endpoint.
 
-decreases the available quantity of book 2 by one, provided sufficient stock exists.
-
-The Order Service will expose a purchase endpoint, while the Frontend Service will provide the corresponding client operations.
+HTTP status codes are used to indicate success, invalid requests, unavailable resources, and failed operations. JSON is used for responses.
 
 ## 5. Data Storage
 
-SQLite was selected because the assignment requires persistent storage without using a heavyweight database server.
+SQLite was selected because the assignment requires persistent storage without the complexity of a separate heavyweight database server.
 
-The Catalog database contains a `books` table with the following fields:
+Each backend service maintains its own database.
 
-| Field    | Type    | Purpose                |
-| -------- | ------- | ---------------------- |
-| id       | INTEGER | Unique book identifier |
-| title    | TEXT    | Book title             |
-| topic    | TEXT    | Book category          |
-| quantity | INTEGER | Available stock        |
-| price    | INTEGER | Book price             |
+### Catalog Database
 
-JDBC and prepared statements are used to execute SQL queries.
+The `books` table stores:
 
-The database is stored on disk, allowing information to persist between application restarts.
+- Book ID
+- Title
+- Topic
+- Quantity
+- Price
 
-The four predefined books are inserted during initialization only if they do not already exist, preventing repeated initialization from overwriting updated prices or quantities.
+The database is initialized automatically, and missing predefined books are inserted without overwriting existing values.
 
-The Order Service will use separate persistent storage for order records.
+### Order Database
+
+The `orders` table stores:
+
+- Order ID
+- Book ID
+- Book title
+- Price at purchase time
+- Order timestamp
+
+Order IDs are generated automatically, and timestamps are recorded by SQLite.
+
+Both services use JDBC and prepared statements for database operations.
+
+The databases are stored separately on disk and are excluded from Git because they contain mutable local data.
 
 ## 6. Concurrency and Consistency
 
-Concurrent requests are handled by the HTTP framework, while database operations must preserve correct inventory values.
+The web framework supports processing multiple incoming HTTP requests.
 
-A key requirement is preventing stock quantities from becoming negative.
-
-The Catalog Service uses a conditional SQL update:
+For inventory changes, Catalog uses a conditional SQL statement:
 
 `UPDATE books SET quantity = quantity + ? WHERE id = ? AND quantity + ? >= 0`
 
-The condition and stock modification are performed in one SQL statement, preventing competing updates from relying on an outdated stock value.
+The availability condition and update are executed in one database statement. This prevents stock from being reduced below zero even when several purchase requests compete for the remaining inventory.
 
-SQLite provides transactional database operations, although write contention and locking behavior may need further testing under heavy concurrent traffic.
+The Order Service checks book availability before requesting the reduction, but a successful conditional stock update is the decisive step for inventory availability.
 
-Consistency across the separate Catalog and Order services remains an integration concern because updates to different service databases are not part of one shared transaction.
+A remaining consistency challenge occurs when stock is reduced successfully but the Order database fails to record the purchase.
+
+Because the two services use separate databases, the current implementation does not provide one atomic transaction across both services.
+
+Recovery or compensation mechanisms and failure testing are potential improvements.
 
 ## 7. Docker Deployment
 
-The planned deployment consists of three Linux Docker containers, one for each service.
+The planned deployment consists of three independent Linux Docker containers:
 
-Each container will run its own Java application and expose an HTTP port.
+- Frontend container
+- Catalog container
+- Order container
 
-The services will communicate using container network addresses and service names.
+Each container will run its own Java service and communicate through Docker networking.
 
-Persistent volumes will be used to preserve database files independently of container lifecycles.
+Persistent volumes will be used for database files.
 
-Docker deployment has not yet been completed. The current Catalog implementation has been tested locally on Windows.
+Service URLs will need to be configurable because `localhost` inside a container refers to that container, not to another service.
+
+Docker deployment has not yet been implemented.
 
 ## 8. Testing
 
-The Catalog Service has been tested manually using a browser, PowerShell, and SQLite Viewer.
+### Catalog Testing
 
-Successful tests include:
+The Catalog Service was tested locally using a browser, PowerShell, and SQLite Viewer.
 
-- Retrieving book details using a valid ID.
-- Handling invalid and nonexistent book IDs.
-- Searching for books in both predefined categories.
-- Returning an empty list for an unknown category.
-- Updating a book's price.
-- Increasing and decreasing book quantities.
-- Rejecting stock reductions that exceed available inventory.
-- Confirming that database changes persist after execution.
+Testing covered book retrieval, topic searches, price updates, stock changes, invalid book IDs, and prevention of negative inventory.
 
-The service currently runs locally on port `8081`.
+### Order Testing
 
-It can be started from the `catalog` directory using:
+The Order Service was tested while Catalog was running independently.
 
-`mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
+Testing verified that Order could receive a successful HTTP response from Catalog, parse book information from JSON, reduce inventory through HTTP, and record purchase information in SQLite.
 
-Full integration, automated, and concurrent-load testing remain future tasks.
+The purchase endpoint was tested using an HTTP POST request.
 
-## 9. Design Trade-offs
+The resulting inventory change and database record were checked.
 
-Several design decisions were made to keep the project simple while meeting the distributed-system requirements.
+### Pending Testing
 
-**Java and Spark Java:** Spark Java provides a lightweight HTTP framework with less configuration than larger application frameworks.
+The following tests remain to be completed:
 
-**SQLite instead of a database server:** SQLite is simple to configure and supports persistent storage, but its single-writer behavior may become a limitation under high write concurrency.
+- Frontend-to-backend integration.
+- Simultaneous purchase requests.
+- Service unavailability and connection failures.
+- Database write failures during purchasing.
+- Full three-container deployment.
 
-**Independent services:** Separating Catalog, Order, and Frontend improves modularity and demonstrates distributed communication, but introduces network failures and cross-service consistency challenges.
+## 9. Design Trade-offs and Limitations
 
-**Repository abstraction:** Database queries are separated from HTTP route handling, improving organization and allowing the REST interface to reuse existing data-access operations.
+**Microservice Separation:** Independent services improve modularity and illustrate distributed communication, but introduce network dependencies and coordination challenges.
 
-**Current limitations:** The complete purchase workflow, distributed deployment, automated tests, and handling of failures between services have not yet been implemented.
+**Spark Java:** A lightweight framework simplifies HTTP routing and reduces configuration overhead.
 
-Future improvements may include stronger input validation, automated integration tests, retry handling, configurable service addresses, and mechanisms to recover from partially completed purchases.
+**SQLite:** Easy setup and file-based persistence make SQLite suitable for this small project. However, write contention may limit performance during high concurrency.
+
+**Independent Databases:** Separating Catalog and Order storage establishes clear data ownership, but makes cross-service transaction consistency more difficult.
+
+**Synchronous HTTP Communication:** Simple to implement and test, but the purchase workflow depends on Catalog being available.
+
+**Current Limitations:** The Frontend Service and Docker deployment are incomplete. Full concurrency testing and robust recovery from partially completed purchases have not yet been implemented.
+
+Future improvements may include configurable service addresses, structured purchase results, automated tests, request timeouts, retry-safe order identifiers, and recovery mechanisms for distributed purchase failures.
