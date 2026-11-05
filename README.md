@@ -14,26 +14,47 @@ The system manages four books and provides three main client operations:
 
 The main objective is to explore microservices, HTTP communication, concurrency, persistent storage, and containerized deployment.
 
+The core functionality of all three microservices has been implemented and tested locally.
+
 ## 2. System Architecture
 
 The application follows a two-tier architecture consisting of three independent microservices.
 
-**Client → Frontend → Catalog / Order**
+```text
+                   Client
+                     |
+                     v
+              Frontend Service
+                 Port 8080
+                     |
+              +------+------+
+              |             |
+              v             v
+       Catalog Service  Order Service
+          Port 8081       Port 8082
+              ^             |
+              |             |
+              +-------------+
+```
 
-The Order Service also communicates directly with the Catalog Service when processing purchases.
+The Frontend Service acts as the entry point for client requests, while Catalog and Order operate as independent backend services.
+
+The Order Service communicates directly with the Catalog Service when processing purchases.
 
 ### Frontend Service
 
 - Acts as the entry point for client requests.
-- Routes search and information requests to Catalog.
-- Forwards purchase requests to Order.
-- **Status:** Not yet implemented.
+- Routes search and information requests to the Catalog Service.
+- Forwards purchase requests to the Order Service.
+- Returns backend HTTP responses to clients.
+- **Status:** Core functionality implemented and manually tested.
 
 ### Catalog Service
 
 - Maintains book information, prices, topics, and stock quantities.
 - Supports querying and updating catalog entries.
-- Stores data persistently using SQLite.
+- Prevents stock quantities from becoming negative.
+- Stores catalog data persistently using SQLite.
 - **Status:** Core functionality implemented and manually tested.
 
 ### Order Service
@@ -46,46 +67,68 @@ The Order Service also communicates directly with the Catalog Service when proce
 
 ## 3. Technology Stack
 
-| Technology      | Purpose                               |
-| --------------- | ------------------------------------- |
-| Java 21         | Main implementation language          |
-| Spark Java      | Lightweight HTTP framework            |
-| Apache Maven    | Dependency management and builds      |
-| Java HttpClient | Communication between services        |
-| REST API        | Service interfaces                    |
-| Gson / JSON     | JSON processing and data exchange     |
-| SQLite / JDBC   | Persistent database storage           |
-| Docker          | Planned container deployment          |
-| Docker Compose  | Planned multi-container orchestration |
-| Git & GitHub    | Version control and collaboration     |
+| Technology      | Purpose                                   |
+| --------------- | ----------------------------------------- |
+| Java 21         | Main implementation language              |
+| Spark Java      | Lightweight HTTP web framework            |
+| Apache Maven    | Dependency management and project builds  |
+| Java HttpClient | HTTP communication between services       |
+| REST API        | Communication interfaces                  |
+| Gson / JSON     | JSON processing and data exchange         |
+| SQLite / JDBC   | Persistent data storage                   |
+| Docker          | Planned containerized deployment          |
+| Docker Compose  | Planned multi-container orchestration     |
+| Git & GitHub    | Version control and project collaboration |
 
 ## 4. Design Decisions
 
 **Independent Maven Projects**
 
-Each microservice has its own source code, dependencies, and build configuration. This allows services to be developed and deployed independently.
+Each microservice has its own source code, dependencies, and build configuration. This provides separation of concerns and allows services to be built and deployed independently.
 
 **Lightweight Web Framework**
 
-Spark Java was selected to implement simple REST endpoints without the overhead of a full-featured web framework.
+Spark Java was selected because the application requires simple REST endpoints rather than a full-featured web application framework.
 
 **REST Communication**
 
-Services communicate using HTTP and JSON instead of directly accessing each other's classes or databases.
+Services communicate through HTTP requests and JSON responses, allowing them to operate as separate processes across different machines.
 
 **Service-Owned Data**
 
-Catalog owns inventory data, while Order owns purchase records. The two databases are stored separately.
+The Catalog Service manages inventory data, while the Order Service maintains purchase records. Each backend service uses its own SQLite database.
+
+Other services access Catalog information through its HTTP API rather than directly accessing its database.
 
 **Layered Code Organization**
 
-HTTP routing, business logic, database operations, and inter-service communication are separated into dedicated Java classes.
+The application separates HTTP routing, business logic, database access, and inter-service communication into dedicated classes.
+
+For example, the Order Service uses separate classes for communicating with Catalog, processing purchases, and saving order records.
+
+**Frontend Request Forwarding**
+
+The Frontend Service forwards incoming requests to the appropriate backend service and returns the resulting HTTP response to the client.
+
+It does not directly access backend databases or implement inventory and purchase logic.
 
 **Containerized Deployment**
 
-Each service is planned to run inside its own Docker container. Docker Compose will be used for networking and orchestration.
+Each service will run in its own Docker container. Docker Compose will simplify deployment and networking between the three services.
+
+Docker deployment has not yet been implemented.
 
 ## 5. REST API Operations
+
+### Frontend Service — Port 8080
+
+The Frontend Service exposes the three client-facing operations.
+
+| Method | Endpoint         | Description                           |
+| ------ | ---------------- | ------------------------------------- |
+| GET    | `/info/:id`      | Retrieve book details through Catalog |
+| GET    | `/search/:topic` | Search for books through Catalog      |
+| POST   | `/purchase/:id`  | Forward purchase requests to Order    |
 
 ### Catalog Service — Port 8081
 
@@ -102,41 +145,57 @@ Each service is planned to run inside its own Docker container. Docker Compose w
 | ------ | --------------- | ----------------------- |
 | POST   | `/purchase/:id` | Process a book purchase |
 
-The purchase operation requests book information from Catalog, verifies availability, decreases the stock, and records the order.
+The purchase operation retrieves book information from Catalog, verifies availability, decreases the stock, and records the successful purchase in the Order database.
 
-### Frontend Service — Planned Port 8080
-
-The Frontend Service will provide the client-facing search, information, and purchase APIs.
+Clients are intended to interact with the Frontend Service on port `8080`, while the backend services communicate through HTTP.
 
 ## 6. Repository Structure
 
-- `catalog/` — Catalog microservice.
-- `order/` — Order microservice.
-- `frontend/` — Frontend microservice, pending implementation.
-- `data/catalog/` — Local Catalog SQLite database.
-- `data/order/` — Local Order SQLite database.
-- `docs/design.md` — System design documentation.
-- `.gitignore` — Excluded build files and local databases.
+```text
+BookStore_DOS_Lab1/
+├── catalog/
+│   ├── pom.xml
+│   └── src/
+├── order/
+│   ├── pom.xml
+│   └── src/
+├── frontend/
+│   ├── pom.xml
+│   └── src/
+├── data/
+│   ├── catalog/
+│   │   └── catalog.db
+│   └── order/
+│       └── orders.db
+├── docs/
+│   └── design.md
+├── .gitignore
+└── README.md
+```
 
-Database files and build outputs are excluded from Git.
+**Note:** The `data/` directory contains local SQLite database files and is excluded from Git. It must be created when setting up the project on a new machine.
+
+Dockerfiles and the Docker Compose configuration will be added during the deployment phase.
 
 ## 7. Development Roadmap
 
 ### Project Setup
 
 - [x] Initialize GitHub repository.
-- [x] Configure Java 21 and Maven.
-- [x] Create three independent Maven projects.
+- [x] Configure Java 21 and Apache Maven.
+- [x] Set up three independent Maven projects.
 - [x] Select the system architecture and technologies.
 
 ### Catalog Service
 
 - [x] Implement Book model.
-- [x] Configure SQLite and create the books table.
-- [x] Seed the initial four books.
-- [x] Implement database queries and updates.
+- [x] Configure SQLite database connection.
+- [x] Create books table.
+- [x] Implement initial book seeding.
+- [x] Implement database queries.
+- [x] Implement price and stock updates.
 - [x] Implement REST endpoints using Spark Java.
-- [x] Implement conditional stock updates.
+- [x] Add conditional stock updates to prevent negative inventory.
 - [x] Perform manual API testing.
 
 ### Order Service
@@ -147,29 +206,53 @@ Database files and build outputs are excluded from Git.
 - [x] Implement stock reduction requests.
 - [x] Create a separate Order SQLite database.
 - [x] Implement persistent order logging.
+- [x] Implement purchase business logic.
 - [x] Implement the purchase REST endpoint.
-- [x] Perform basic manual purchase testing.
+- [x] Perform manual purchase testing.
+
+### Frontend Service
+
+- [x] Implement HTTP forwarding to Catalog.
+- [x] Implement HTTP forwarding to Order.
+- [x] Implement the Info endpoint.
+- [x] Implement the Search endpoint.
+- [x] Implement the Purchase endpoint.
+- [x] Test communication with backend services.
+- [x] Verify the complete purchase request flow locally.
 
 ### Remaining Work
 
-- [ ] Implement Frontend Service.
-- [ ] Complete end-to-end integration testing.
-- [ ] Improve failure handling and purchase consistency.
+- [ ] Make service URLs configurable for Docker deployment.
+- [ ] Configure database paths and persistent Docker volumes.
+- [ ] Create Dockerfiles for all three services.
+- [ ] Configure Docker Compose and container networking.
+- [ ] Deploy the services in separate Linux containers.
+- [ ] Perform Docker-based integration testing.
 - [ ] Test concurrent purchase requests.
-- [ ] Deploy all three services using Docker.
+- [ ] Improve failure handling and purchase consistency.
 - [ ] Complete final documentation and execution logs.
 
 ## 8. Current Status
 
-**Current Phase: Catalog and Order Core Functionality Implemented — Frontend Next**
+**Current Phase: All Three Microservices Implemented — Docker Deployment Next**
+
+The core functionality of the Catalog, Order, and Frontend services has been implemented and manually tested.
 
 The Catalog Service supports book queries, searching, price updates, and inventory management.
 
 The Order Service communicates with Catalog using HTTP requests, checks book availability, reduces stock, and stores successful purchases in a separate SQLite database.
 
-Both services have been tested locally.
+The Frontend Service provides a single entry point for clients and forwards requests to the appropriate backend service.
 
-The full distributed application is not yet complete. Frontend integration, Docker deployment, concurrency testing, and stronger recovery from partial purchase failures remain pending.
+All three services can run simultaneously as independent Java processes on the local machine.
+
+The complete request flow has been tested:
+
+**Client → Frontend → Order → Catalog**
+
+Successful purchases update Catalog inventory and create persistent records in the Order database.
+
+Although the core functionality is working locally, Docker deployment, advanced concurrency testing, and recovery from partial purchase failures remain incomplete.
 
 ## 9. Running and Testing
 
@@ -183,73 +266,173 @@ The full distributed application is not yet complete. Frontend integration, Dock
 
 From the project root, create the directories if they do not exist:
 
-`New-Item -ItemType Directory -Force data\catalog`
+```powershell
+New-Item -ItemType Directory -Force data\catalog
+New-Item -ItemType Directory -Force data\order
+```
 
-`New-Item -ItemType Directory -Force data\order`
+The SQLite database files are created automatically when the backend services initialize.
 
 ### Step 2 — Start Catalog
 
 Open a terminal in the `catalog` directory:
 
-`mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
+```powershell
+mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"
+```
 
 Catalog runs on port `8081`.
 
+Keep this terminal running.
+
 ### Step 3 — Start Order
 
-Keep Catalog running. Open another terminal in the `order` directory:
+Open a second terminal in the `order` directory:
 
-`mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"`
+```powershell
+mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"
+```
 
 Order runs on port `8082`.
 
-### Step 4 — Test Catalog
+Keep this terminal running.
 
-Retrieve book information:
+### Step 4 — Start Frontend
 
-`http://localhost:8081/info/2`
+Open a third terminal in the `frontend` directory:
 
-Search by topic:
+```powershell
+mvn clean compile exec:java "-Dexec.mainClass=com.bookstore.App"
+```
 
-`http://localhost:8081/search/distributed%20systems`
+Frontend runs on port `8080`.
 
-Update a book's price using PowerShell:
+Keep all three services running while performing the following tests.
 
-`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/price/2?price=80"`
+### Step 5 — Test Frontend Info
 
-Decrease stock:
+Retrieve information about book 2:
 
-`Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1"`
+`http://localhost:8080/info/2`
 
-### Step 5 — Test Order
+The Frontend Service forwards the request to Catalog and returns the book information as JSON.
 
-Open a third PowerShell terminal.
+Test a nonexistent book:
 
-Purchase book 2:
+`http://localhost:8080/info/99`
 
-`Invoke-RestMethod -Method Post -Uri "http://localhost:8082/purchase/2"`
+The request should return a not-found response.
 
-Check the book information again:
+### Step 6 — Test Frontend Search
 
-`http://localhost:8081/info/2`
+Search for books about distributed systems:
 
-The stock should decrease by one after a successful purchase.
+`http://localhost:8080/search/distributed%20systems`
 
-Verify the order log by opening `data/order/orders.db` with SQLite Viewer and executing:
+Search for books about undergraduate school:
 
-`SELECT * FROM orders;`
+`http://localhost:8080/search/undergraduate%20school`
+
+Search for a nonexistent topic:
+
+`http://localhost:8080/search/databases`
+
+An unknown topic should return an empty list.
+
+### Step 7 — Test Frontend Purchase
+
+Open a fourth PowerShell terminal while all three services are running.
+
+First, check the current stock of book 2:
+
+`http://localhost:8080/info/2`
+
+Then execute a purchase request:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/purchase/2"
+```
+
+If the purchase succeeds, the response should contain a message similar to:
+
+```json
+{
+  "message": "bought book RPCs for Noobs"
+}
+```
+
+### Step 8 — Verify Purchase Results
+
+After purchasing the book:
+
+1. Open `http://localhost:8080/info/2` again.
+2. Confirm that the available stock decreased by one.
+3. Open `data/order/orders.db` using SQLite Viewer.
+4. Execute:
+
+```sql
+SELECT * FROM orders;
+```
+
+A new record should appear for the successful purchase.
+
+### Step 9 — Test Invalid Purchase
+
+Send a request for a nonexistent book:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/purchase/99"
+```
+
+The system should reject the purchase and return a not-found response.
+
+PowerShell may display non-success HTTP responses as errors. This is expected behavior.
+
+### Additional Catalog API Testing
+
+The Catalog Service also supports direct inventory and price updates.
+
+Update the price of book 2:
+
+```powershell
+Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/price/2?price=80"
+```
+
+Decrease stock by one:
+
+```powershell
+Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=-1"
+```
+
+Increase stock by five:
+
+```powershell
+Invoke-RestMethod -Method Put -Uri "http://localhost:8081/update/stock/2?change=5"
+```
+
+These update operations are primarily intended for inventory management and inter-service communication.
 
 ### Testing Notes
 
-- Catalog search, information retrieval, and inventory updates were tested manually.
-- Order-to-Catalog HTTP communication was verified.
-- A purchase was tested by checking the stock change and persistent order record.
-- Requests for nonexistent books and insufficient stock should be rejected.
-- Each successful purchase changes persistent data.
-- Automated concurrency and failure-recovery tests are still pending.
+The following functionality has been manually tested:
 
-**Important:** The current purchase workflow can become inconsistent if stock reduction succeeds but saving the order fails. This limitation will be addressed or documented during final integration.
+- Catalog book retrieval and topic searching.
+- Catalog price and inventory updates.
+- Order-to-Catalog HTTP communication.
+- JSON parsing between services.
+- Book purchases and persistent order logging.
+- Frontend request forwarding.
+- End-to-end purchase flow through all three services.
+- Handling requests for nonexistent books.
+
+**Important considerations:**
+
+- Database changes persist between application restarts.
+- Repeating a successful purchase decreases stock again.
+- Local manual testing does not replace concurrency and failure-recovery testing.
+- The current purchase workflow can become inconsistent if stock reduction succeeds but saving the order fails.
+- Docker deployment and distributed integration testing are still pending.
 
 ## 10. Documentation
 
-See [System Design Document](docs/design.md) for architecture details, service responsibilities, design decisions, and limitations.
+See [System Design Document](docs/design.md) for architecture details, service responsibilities, data storage, concurrency considerations, design decisions, and known limitations.
