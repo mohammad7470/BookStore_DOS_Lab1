@@ -11,39 +11,43 @@ import java.nio.charset.StandardCharsets;
 
 public class CatalogClient {
 
-    private final HttpClient client = HttpClient.newHttpClient();
+        private final HttpClient client = HttpClient.newHttpClient();
 
-    private static final String CATALOG_URL = "http://localhost:8081";
+        // private static final String CATALOG_URL = "http://localhost:8081";// for
+        // localhost
+        private static final String CATALOG_URL = System.getenv().getOrDefault(
+                        "CATALOG_URL",
+                        "http://localhost:8081");
 
-    public HttpResponse<String> getBookInfo(String id)
-            throws IOException, InterruptedException {
+        public HttpResponse<String> getBookInfo(String id)
+                        throws IOException, InterruptedException {
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(CATALOG_URL + "/info/" + id))
-                .GET()
-                .build();
+                HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create(CATALOG_URL + "/info/" + id))
+                                .GET()
+                                .build();
 
-        return client.send(
-                request,
-                HttpResponse.BodyHandlers.ofString());
-    }
+                return client.send(
+                                request,
+                                HttpResponse.BodyHandlers.ofString());
+        }
 
-    public HttpResponse<String> searchBooks(String topic)
-            throws IOException, InterruptedException {
+        public HttpResponse<String> searchBooks(String topic)
+                        throws IOException, InterruptedException {
 
-        String encodedTopic = URLEncoder
-                .encode(topic, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+                String encodedTopic = URLEncoder
+                                .encode(topic, StandardCharsets.UTF_8)
+                                .replace("+", "%20");
 
-        String url = CATALOG_URL + "/search/" + encodedTopic;
+                String url = CATALOG_URL + "/search/" + encodedTopic;
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
+                HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .GET()
+                                .build();
 
-        return client.send(
-                request,
-                HttpResponse.BodyHandlers.ofString());
-    }
+                return client.send(
+                                request,
+                                HttpResponse.BodyHandlers.ofString());
+        }
 }

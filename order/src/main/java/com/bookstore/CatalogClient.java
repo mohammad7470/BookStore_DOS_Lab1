@@ -8,36 +8,55 @@ import java.io.IOException;
 
 public class CatalogClient {
 
-    private final HttpClient client = HttpClient.newHttpClient();
+        private final HttpClient client = HttpClient.newHttpClient();
 
-    public HttpResponse<String> getBookInfo(int id)
-            throws IOException, InterruptedException {
+        private static final String CATALOG_URL = System.getenv().getOrDefault(
+                        "CATALOG_URL",
+                        "http://localhost:8081");
 
-        String url = "http://localhost:8081/info/" + id;
+        public HttpResponse<String> getBookInfo(int id)
+                        throws IOException, InterruptedException {
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
+                String url = CATALOG_URL + "/info/" + id;
 
-        return client.send(
-                request,
-                HttpResponse.BodyHandlers.ofString());
-    }
+                HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .GET()
+                                .build();
 
-    public HttpResponse<String> decreaseStock(int id)
-            throws IOException, InterruptedException {
+                return client.send(
+                                request,
+                                HttpResponse.BodyHandlers.ofString());
+        }
 
-        String url = "http://localhost:8081/update/stock/" + id
-                + "?change=-1";
+        public HttpResponse<String> decreaseStock(int id)
+                        throws IOException, InterruptedException {
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .PUT(HttpRequest.BodyPublishers.noBody())
-                .build();
+                String url = CATALOG_URL + "/update/stock/" + id + "?change=-1";
 
-        return client.send(
-                request,
-                HttpResponse.BodyHandlers.ofString());
-    }
+                HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .PUT(HttpRequest.BodyPublishers.noBody())
+                                .build();
+
+                return client.send(
+                                request,
+                                HttpResponse.BodyHandlers.ofString());
+        }
+
+        public HttpResponse<String> increaseStock(int id)
+                        throws IOException, InterruptedException {
+
+                String url = CATALOG_URL + "/update/stock/" + id
+                                + "?change=1";
+
+                HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .PUT(HttpRequest.BodyPublishers.noBody())
+                                .build();
+
+                return client.send(
+                                request,
+                                HttpResponse.BodyHandlers.ofString());
+        }
 }
