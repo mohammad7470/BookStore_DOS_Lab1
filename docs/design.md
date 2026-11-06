@@ -10,11 +10,13 @@ Bazar.com is a distributed bookstore implemented using a multi-tier microservice
 
 The application manages four books and provides search, information retrieval, and purchase operations.
 
-Its main objective is to demonstrate communication between independently running services using HTTP REST APIs, persistent storage, and concurrent request processing.
+Its main objective is to demonstrate communication between independently running services using HTTP REST APIs, persistent storage, concurrent request processing, and containerized deployment.
 
 The system consists of three services: Frontend, Catalog, and Order.
 
-The core functionality of all three services has been implemented and manually tested on the local development machine. Docker deployment and advanced testing remain pending.
+All three services have been implemented, integrated, and deployed in separate Linux Docker containers using Docker Compose.
+
+The application has been tested for core functionality, service communication, persistent storage, concurrent purchases, service unavailability, and simulated order database failures.
 
 ## 2. Architecture
 
@@ -22,23 +24,33 @@ The architecture contains a client-facing Frontend Service and two backend servi
 
 Clients communicate with Frontend, which forwards search and information requests to Catalog and purchase requests to Order.
 
-The Order Service communicates with Catalog to retrieve book information and update inventory.
+The Order Service communicates directly with Catalog to retrieve book information and update inventory.
 
-The complete communication flow is:
+The communication flows are:
 
 **Search / Info:** Client → Frontend → Catalog → Frontend → Client
 
 **Purchase:** Client → Frontend → Order → Catalog → Order → Frontend → Client
 
-Services run as separate Java processes and communicate through HTTP rather than shared memory.
+Services run as separate Java applications inside individual Docker containers and communicate through HTTP rather than shared memory.
 
-Currently, all three services can run simultaneously on the local machine using separate HTTP ports:
+The deployment uses the following ports:
 
-- **Frontend:** 8080
-- **Catalog:** 8081
-- **Order:** 8082
+| Service  | Port | Responsibility                        |
+| -------- | ---- | ------------------------------------- |
+| Frontend | 8080 | Client-facing requests                |
+| Catalog  | 8081 | Book and inventory management         |
+| Order    | 8082 | Purchase processing and order records |
 
-The architecture is designed to support deployment on separate machines or Docker containers.
+Docker Compose creates a shared network that allows services to communicate using their service names.
+
+For example, Order accesses Catalog through:
+
+`http://catalog:8081`
+
+This removes the need to use host-specific addresses for internal container communication.
+
+The architecture separates client request handling, inventory management, and order processing into independent components.
 
 ## 3. Service Responsibilities
 
@@ -51,20 +63,24 @@ Its implementation is organized into the following classes:
 - **Book:** Represents a book and its properties.
 - **Database:** Opens SQLite connections and initializes the books table.
 - **CatalogRepository:** Performs database queries, insertions, and updates.
-- **App:** Registers HTTP endpoints using Spark Java.
+- **App:** Starts the HTTP server and registers REST endpoints using Spark Java.
 
 The service supports searching by topic, querying by book ID, updating prices, and adjusting stock quantities.
 
+It uses a conditional SQL update to ensure that stock quantities cannot become negative.
+
+Catalog owns its database, and other services interact with it through HTTP requests.
+
 ### Order Service
 
-The Order Service processes purchase requests and keeps a persistent record of successful purchases.
+The Order Service processes purchase requests and maintains a persistent record of successful purchases.
 
 Its implementation includes:
 
-- **CatalogClient:** Sends HTTP requests to the Catalog Service using Java HttpClient.
-- **OrderService:** Coordinates the purchase workflow.
+- **CatalogClient:** Sends HTTP requests to Catalog using Java HttpClient.
+- **OrderService:** Coordinates purchase processing and compensation logic.
 - **OrderRepository:** Inserts successful purchase records into SQLite.
-- **Database:** Manages Order database connections and table initialization.
+- **Database:** Manages database connections and initializes the orders table.
 - **App:** Starts the HTTP server and exposes the purchase endpoint.
 
 The purchase workflow consists of the following steps:
@@ -77,17 +93,23 @@ The purchase workflow consists of the following steps:
 6. Save the purchase record to the Order database.
 7. Return the purchase result.
 
-A purchase is rejected if the book does not exist, has insufficient stock, or the inventory update fails.
+If the book does not exist or has insufficient stock, the purchase is rejected.
+
+If Catalog successfully decreases stock but saving the order causes a SQL exception, Order attempts to restore the deducted quantity.
+
+This recovery operation is implemented through an additional HTTP request to Catalog.
+
+The mechanism improves failure handling but is not a fully atomic distributed transaction.
 
 ### Frontend Service
 
-The Frontend Service acts as the entry point for client requests and forwards them to the appropriate backend service.
+The Frontend Service acts as the main entry point for client requests and forwards them to the appropriate backend service.
 
 Its implementation includes:
 
-- **CatalogClient:** Sends HTTP requests to the Catalog Service for book information and searches.
-- **OrderClient:** Sends HTTP purchase requests to the Order Service.
-- **App:** Starts the HTTP server and registers the client-facing REST endpoints.
+- **CatalogClient:** Sends HTTP requests to Catalog for book information and searches.
+- **OrderClient:** Sends purchase requests to Order.
+- **App:** Starts the HTTP server and registers client-facing REST endpoints.
 
 The Frontend Service provides three operations:
 
@@ -95,13 +117,15 @@ The Frontend Service provides three operations:
 - **Info:** Forwards book information requests to Catalog.
 - **Purchase:** Forwards purchase requests to Order.
 
-Frontend returns the backend response body and HTTP status code to the client.
+Frontend returns the backend HTTP status code and response body to the client.
 
-It does not access the Catalog or Order databases directly and does not implement the underlying purchase or inventory logic.
+It does not access backend databases directly and does not implement the underlying purchase or inventory logic.
 
 ## 4. REST API Design
 
-HTTP REST APIs provide communication between independent services. JSON is used to exchange data and return operation results.
+HTTP REST APIs provide communication between the independent services.
+
+JSON is used to exchange book information and operation results.
 
 ### Frontend APIs
 
@@ -111,7 +135,7 @@ HTTP REST APIs provide communication between independent services. JSON is used 
 | GET    | `/search/:topic` | Search for books through Catalog          |
 | POST   | `/purchase/:id`  | Forward a purchase request to Order       |
 
-Frontend runs locally on port `8080`.
+Frontend runs on port `8080`.
 
 ### Catalog APIs
 
@@ -122,7 +146,7 @@ Frontend runs locally on port `8080`.
 | PUT    | `/update/price/:id?price=value`  | Modify book price     |
 | PUT    | `/update/stock/:id?change=value` | Modify inventory      |
 
-Catalog runs locally on port `8081`.
+Catalog runs on port `8081`.
 
 ### Order API
 
@@ -130,17 +154,19 @@ Catalog runs locally on port `8081`.
 | ------ | --------------- | ------------------ |
 | POST   | `/purchase/:id` | Process a purchase |
 
-Order runs locally on port `8082`.
+Order runs on port `8082`.
 
-During a purchase, Order uses the Catalog information endpoint to retrieve book details and the stock update endpoint to decrease the available quantity.
+During a purchase, Order uses the Catalog information endpoint and the stock update endpoint.
 
-HTTP status codes are used to indicate success, invalid requests, unavailable books, insufficient stock, and service communication failures.
+For compensation, Order sends another stock update request with a positive quantity change.
 
-The Frontend Service forwards the status code and response body received from the corresponding backend service.
+HTTP status codes indicate successful operations, invalid requests, unavailable books, insufficient stock, and service communication failures.
+
+The Frontend Service forwards responses from the appropriate backend service.
 
 ## 5. Data Storage
 
-SQLite was selected because the assignment requires persistent storage without the complexity of a separate heavyweight database server.
+SQLite was selected because the assignment requires persistent storage without the complexity of a separate database server.
 
 Each backend service maintains its own database.
 
@@ -156,9 +182,13 @@ The `books` table stores:
 
 The database is initialized automatically, and missing predefined books are inserted without overwriting existing values.
 
-The Catalog database is stored locally at:
+The database is stored on the host at:
 
 `data/catalog/catalog.db`
+
+Inside the Docker container, the database is accessed through:
+
+`/data/catalog.db`
 
 ### Order Database
 
@@ -172,13 +202,25 @@ The `orders` table stores:
 
 Order IDs are generated automatically, and timestamps are recorded by SQLite.
 
-The Order database is stored locally at:
+The database is stored on the host at:
 
 `data/order/orders.db`
 
+Inside the Docker container, it is accessed through:
+
+`/data/orders.db`
+
 Both services use JDBC and prepared statements for database operations.
 
-The databases are stored separately on disk and are excluded from Git because they contain mutable local data.
+### Persistent Storage
+
+Docker bind mounts connect the database directories on the host machine to the corresponding directories inside the containers.
+
+This allows data to remain available even when containers are stopped, removed, or recreated.
+
+The persistence mechanism was tested by recreating the application containers and checking that previously stored data remained available.
+
+The database files are excluded from Git because they contain mutable local data.
 
 The Frontend Service does not maintain its own database.
 
@@ -186,97 +228,230 @@ The Frontend Service does not maintain its own database.
 
 Spark Java supports handling multiple incoming HTTP requests, allowing the services to process concurrent requests.
 
-For inventory changes, Catalog uses a conditional SQL statement:
+For inventory changes, Catalog uses the following conditional SQL statement:
 
-`UPDATE books SET quantity = quantity + ? WHERE id = ? AND quantity + ? >= 0`
+```sql
+UPDATE books
+SET quantity = quantity + ?
+WHERE id = ? AND quantity + ? >= 0;
+```
 
-The availability condition and update are executed in one database statement. This prevents stock from being reduced below zero even when several purchase requests compete for the remaining inventory.
+The availability condition and stock update are executed as a single SQL statement.
 
-The Order Service checks book availability before requesting the reduction, but a successful conditional stock update is the decisive step for inventory availability.
+This prevents the inventory quantity from becoming negative when multiple purchase requests compete for the remaining stock.
 
-A remaining consistency challenge occurs when stock is reduced successfully but the Order database fails to record the purchase.
+Although Order checks the available quantity before requesting a stock reduction, this preliminary check may become outdated when concurrent purchases occur.
 
-Because Catalog and Order use separate databases, the current implementation does not provide one atomic transaction across both services.
+Therefore, the conditional stock update in Catalog is the decisive operation.
 
-Another potential issue is an interrupted or timed-out HTTP request after the backend has already processed a purchase. Without request identifiers and duplicate-request protection, retrying may result in an additional purchase.
+### Concurrency Testing
 
-Recovery mechanisms, request idempotency, and failure testing are possible improvements.
+A reusable PowerShell script was created to issue multiple purchase requests concurrently.
+
+The script allows configuration of the book ID, number of requests, and initial stock quantity.
+
+A test scenario uses 10 concurrent purchase requests with only 3 available copies.
+
+Under normal operation, the expected result is three successful purchases and seven rejected requests, leaving the stock at zero.
+
+This testing approach helps evaluate the correctness of the inventory update logic under concurrent requests.
+
+### Purchase Consistency
+
+Catalog and Order use separate databases, so their updates cannot be committed through a single local database transaction.
+
+A consistency problem can occur if Catalog decreases inventory successfully but Order fails to save the corresponding purchase record.
+
+To reduce this problem, a compensation mechanism was implemented.
+
+When saving an order throws a SQL exception, Order attempts to send a request to Catalog to restore one unit of stock.
+
+A simulated SQL failure was introduced through an environment variable to test this recovery path.
+
+The compensation behavior was tested by observing the purchase failure, inventory restoration, and service logs.
+
+However, compensation is a best-effort mechanism rather than a guarantee of complete consistency.
+
+If the restoration request fails, the services may remain inconsistent.
+
+Another possible issue is an interrupted or timed-out HTTP request after an operation has already been processed.
+
+Without unique request identifiers and idempotency protection, retrying such a request may cause duplicate purchases.
 
 ## 7. Docker Deployment
 
-The planned deployment consists of three independent Linux Docker containers:
+The application is deployed using three independent Linux Docker containers:
 
 - Frontend container
 - Catalog container
 - Order container
 
-Each container will run its own Java service and communicate through Docker networking.
+Each service includes its own Dockerfile.
 
-Persistent volumes will be used to preserve Catalog and Order database files across container restarts.
+### Multi-Stage Docker Builds
 
-Service addresses will need to be configurable because `localhost` inside a container refers to that container rather than another service.
+The Dockerfiles use two stages:
 
-The local implementation currently uses ports `8080`, `8081`, and `8082`.
+**Build Stage**
 
-Dockerfiles, Docker Compose configuration, container networking, and persistent volume setup remain to be completed.
+A Maven image with Java 21 compiles the application and collects the required dependencies.
 
-Docker deployment has not yet been tested.
+**Runtime Stage**
+
+A Java 21 runtime image executes the compiled classes and their dependencies.
+
+This approach avoids including Maven and source files in the final runtime image.
+
+### Docker Compose
+
+Docker Compose is used to build, start, and manage the three services.
+
+The configuration is stored in:
+
+`compose.yaml`
+
+The file defines:
+
+- Build directories for each service.
+- Published HTTP ports.
+- Environment variables.
+- Internal service addresses.
+- Persistent database bind mounts.
+- Service startup dependencies.
+
+The application is started using:
+
+```powershell
+docker compose up --build -d
+```
+
+And stopped using:
+
+```powershell
+docker compose down
+```
+
+Docker Compose creates a shared network that allows services to resolve each other by service name.
+
+### Environment Variables
+
+The application uses environment variables to configure service addresses and database locations.
+
+| Variable                    | Service         | Purpose                             |
+| --------------------------- | --------------- | ----------------------------------- |
+| `CATALOG_URL`               | Frontend, Order | Catalog service address             |
+| `ORDER_URL`                 | Frontend        | Order service address               |
+| `CATALOG_DB_URL`            | Catalog         | Catalog SQLite connection URL       |
+| `ORDER_DB_URL`              | Order           | Order SQLite connection URL         |
+| `SIMULATE_ORDER_DB_FAILURE` | Order           | Optional simulated database failure |
+
+The failure simulation is disabled during normal operation.
+
+### Container Networking
+
+Services communicate internally using Docker Compose service names.
+
+For example:
+
+`http://catalog:8081`
+
+`http://order:8082`
+
+This is necessary because `localhost` inside a container refers to the container itself rather than another service.
+
+### Persistent Database Mounts
+
+The Catalog and Order database directories are mounted from the host machine into their respective containers.
+
+This allows the application containers to be recreated without removing existing inventory or purchase records.
+
+The deployment was tested by running the complete application through Docker Compose and verifying communication between the three containers.
+
+One limitation of the current Compose configuration is that startup dependencies control container startup order but do not guarantee that backend HTTP services are ready before dependent services start.
 
 ## 8. Testing
 
 ### Catalog Testing
 
-The Catalog Service was tested locally using a browser, PowerShell, and SQLite Viewer.
+The Catalog Service was tested using a browser, PowerShell, and SQLite Viewer.
 
 Testing covered book retrieval, topic searches, price updates, stock changes, invalid book IDs, and prevention of negative inventory.
+
+Catalog was also tested after deployment inside Docker.
 
 ### Order Testing
 
 The Order Service was tested while Catalog was running independently.
 
-Testing verified that Order could receive a successful HTTP response from Catalog, parse book information from JSON, reduce inventory through HTTP, and record purchase information in SQLite.
+Testing verified communication with Catalog, parsing book information from JSON, reducing inventory through HTTP, and recording successful purchases in SQLite.
 
-The purchase endpoint was tested using an HTTP POST request.
+The purchase endpoint was tested using HTTP POST requests.
 
-The resulting inventory change and database record were checked.
+Inventory changes and purchase records were checked after successful requests.
 
 ### Frontend Testing
 
-The Frontend Service was tested locally while Catalog and Order were running as separate processes.
+The Frontend Service was tested while Catalog and Order were running as separate processes.
 
-Testing covered:
+Testing covered forwarding information requests, topic searches, and purchase requests to the appropriate backend services.
 
-- Forwarding book information requests to Catalog.
-- Forwarding topic-based search requests to Catalog.
-- Returning search results for both predefined topics.
-- Returning an empty list for an unknown topic.
-- Forwarding purchase requests to Order.
-- Returning backend HTTP responses to the client.
+The returned HTTP responses were also checked.
 
-### End-to-End Integration Testing
+### Docker Integration Testing
 
-The complete purchase flow was tested using the Frontend Service.
+The three services were deployed in independent Linux containers connected through a Docker network.
 
-A client sent an HTTP POST request to:
+Testing verified that Frontend could communicate with Catalog and Order, and that Order could communicate with Catalog.
 
-`http://localhost:8080/purchase/1`
+The complete purchase workflow was tested through Frontend on port `8080`.
 
-The request was forwarded to Order, which communicated with Catalog to check availability and decrease the stock.
+### Persistence Testing
 
-The purchase was verified by checking the updated inventory and persistent order records.
+The application containers were removed and recreated using Docker Compose.
 
-This confirmed basic communication between all three services on the local development machine.
+Previously stored inventory values and order records were checked after restarting the services.
 
-### Pending Testing
+This tested the persistence of SQLite data stored through Docker bind mounts.
 
-The following tests remain to be completed:
+### Concurrency Testing
 
-- Simultaneous purchase requests.
-- Service unavailability and network failure scenarios.
-- Database write failures during purchasing.
-- Duplicate purchase request handling.
-- Full three-container Docker deployment.
-- Automated integration and load testing.
+A reusable PowerShell script was created:
+
+`tests/concurrency-test.ps1`
+
+The script sends multiple purchase requests concurrently and reports the resulting HTTP status codes.
+
+It also checks the remaining stock after the test.
+
+### Service Failure Testing
+
+A second PowerShell script was created:
+
+`tests/failure-test.ps1`
+
+The script tests how the application behaves when Catalog becomes unavailable.
+
+It stops Catalog, sends information and purchase requests through Frontend, and observes the resulting failures.
+
+It then restores Catalog and checks that normal communication resumes.
+
+### Compensation Testing
+
+The Order Service supports simulated database failures using:
+
+`SIMULATE_ORDER_DB_FAILURE`
+
+When enabled, the application throws a simulated SQL exception before recording the purchase, after inventory has been reduced.
+
+Order then attempts to restore the stock through Catalog.
+
+The test was used to examine the recovery mechanism and confirm that the normal purchase workflow remains functional when simulation is disabled.
+
+### Remaining Testing Limitations
+
+The completed tests cover the main functional, deployment, concurrency, and selected failure scenarios.
+
+However, they do not exhaustively cover all possible network failures, database failures, request duplication scenarios, or sustained high-load conditions.
 
 ## 9. Design Trade-offs and Limitations
 
@@ -288,10 +463,18 @@ The following tests remain to be completed:
 
 **Independent Databases:** Separating Catalog and Order storage establishes clear data ownership, but makes cross-service transaction consistency more difficult.
 
-**Synchronous HTTP Communication:** HTTP requests are straightforward to implement and test, but backend service availability directly affects dependent operations.
+**Synchronous HTTP Communication:** HTTP requests are straightforward to implement and test, but backend availability directly affects dependent operations.
 
 **Frontend Request Forwarding:** Using Frontend as a single client entry point simplifies interactions and hides backend addresses from clients, but creates an additional network hop.
 
-**Current Limitations:** The services have been tested locally, but Docker deployment, advanced concurrency testing, and robust recovery from partially completed purchases remain incomplete.
+**Docker Deployment:** Containers provide isolated and reproducible runtime environments, while Docker Compose simplifies deployment and networking. However, service readiness and runtime dependencies still require consideration.
 
-Future improvements may include configurable service addresses, structured purchase results, automated tests, request timeouts, retry-safe order identifiers, and recovery mechanisms for distributed purchase failures.
+**Persistent Bind Mounts:** Storing SQLite files on the host protects data from container recreation, but makes deployment dependent on host storage paths and permissions.
+
+**Conditional Inventory Updates:** Atomic conditional SQL updates prevent negative stock and reduce the risk of overselling under concurrent requests.
+
+**Compensating Transactions:** Attempting to restore stock after a failed order insert improves consistency, but compensation itself can fail and does not provide distributed atomicity.
+
+**Current Limitations:** The system does not implement distributed transactions, idempotency keys, durable compensation retries, or comprehensive recovery from ambiguous network failures.
+
+Future improvements may include request identifiers, structured purchase results, automated integration tests, request timeouts, health checks, retry-safe operations, and more robust distributed transaction recovery mechanisms.

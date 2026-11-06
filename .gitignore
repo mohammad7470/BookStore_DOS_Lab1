@@ -2,7 +2,7 @@
 **/target/
 *.class
 
-# IDE configuration
+# IDE files
 .vscode/
 .idea/
 *.iml
@@ -21,6 +21,6 @@ data/
 .env
 *.log
 
-# Operating system files
+# System files
 Thumbs.db
 .DS_Store

@@ -7,7 +7,12 @@ import java.sql.Connection;
 
 public class Database {
 
-    private static final String DB_URL = "jdbc:sqlite:../data/catalog/catalog.db";
+    // private static final String DB_URL =
+    // "jdbc:sqlite:../data/catalog/catalog.db";
+
+    private static final String DB_URL = System.getenv().getOrDefault(
+            "CATALOG_DB_URL",
+            "jdbc:sqlite:../data/catalog/catalog.db");
 
     public static Connection connect() throws SQLException {
         return DriverManager.getConnection(DB_URL);

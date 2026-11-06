@@ -56,9 +56,47 @@ public class OrderService {
         // 6. Verify the stock update
         if (updateResponse.statusCode() == 200) {
 
-            orderRepository.saveOrder(id, title, price);
+            try {
 
-            return "bought book " + title;
+                if ("true".equalsIgnoreCase(
+                        System.getenv("SIMULATE_ORDER_DB_FAILURE"))) {
+
+                    throw new SQLException("Simulated order database failure");
+                }
+
+                orderRepository.saveOrder(id, title, price);
+
+                return "bought book " + title;
+
+            } catch (SQLException e) {
+
+                // Attempt to restore the deducted stock
+                try {
+                    HttpResponse<String> restoreResponse = catalogClient.increaseStock(id);
+
+                    if (restoreResponse.statusCode() == 200) {
+                        System.err.println(
+                                "Order save failed. Stock restored for book " + id);
+                    } else {
+                        System.err.println(
+                                "CRITICAL: Stock restoration failed. HTTP "
+                                        + restoreResponse.statusCode());
+                    }
+
+                } catch (IOException | InterruptedException restoreError) {
+
+                    System.err.println(
+                            "CRITICAL: Could not restore stock for book " + id);
+
+                    e.addSuppressed(restoreError);
+
+                    if (restoreError instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                throw e;
+            }
         }
 
         if (updateResponse.statusCode() == 409) {

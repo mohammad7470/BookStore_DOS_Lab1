@@ -7,7 +7,11 @@ import java.sql.Statement;
 
 public class Database {
 
-    private static final String DB_URL = "jdbc:sqlite:../data/order/orders.db";
+    // private static final String DB_URL = "jdbc:sqlite:../data/order/orders.db";
+
+    private static final String DB_URL = System.getenv().getOrDefault(
+            "ORDER_DB_URL",
+            "jdbc:sqlite:../data/order/orders.db");
 
     public static Connection connect() throws SQLException {
         return DriverManager.getConnection(DB_URL);
