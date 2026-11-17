@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 public class CatalogClient {
 
         private final HttpClient client = HttpClient.newHttpClient();
+        
 
         // private static final String CATALOG_URL = "http://localhost:8081";// for
         // localhost
