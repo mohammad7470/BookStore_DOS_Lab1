@@ -3,6 +3,7 @@ package com.bookstore;
 import java.io.IOException;
 import java.net.http.HttpResponse;
 
+
 import static spark.Spark.*;
 
 public class App {
@@ -91,6 +92,7 @@ public class App {
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                
                 res.status(503);
                 return "{\"error\":\"Request interrupted\"}";
             }
