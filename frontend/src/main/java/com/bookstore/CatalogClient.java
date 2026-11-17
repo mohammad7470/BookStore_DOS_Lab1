@@ -16,6 +16,7 @@ public class CatalogClient {
         // private static final String CATALOG_URL = "http://localhost:8081";// for
         // localhost
         private static final String CATALOG_URL = System.getenv().getOrDefault(
+                
                         "CATALOG_URL",
                         "http://localhost:8081");
 
